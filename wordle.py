@@ -264,14 +264,21 @@ class WordleHelper:
 # (target: sprat, guess: awiap) -- what's the feedback? does it handle the a's correctly?
 # (target:clock, guess: chino) -- returns [1, -1, -1, -1, 0], which means we set possible location
 # for c as {0}, so we eliminate clock, which is wrong.
+# good starting words: ["stern", "adieu", "audio", "stare", "teary", "poious", "crane", "trace", "arise"]
 def main():
-    parser = argparse.ArgumentParser(description="Solves/plays wordle.")
+    parser = argparse.ArgumentParser(
+        description="Solves/plays wordle. It supports multiple modes so you can use it as a solver or just play the game as usual."
+    )
     parser.add_argument(
         "--game_mode",
         choices=["solve", "bot_play", "play"],
         default="play",
         type=str.lower,
-        help="play: you play against the computer\nbot_play: you watch\nsolve: it solves for you",
+        help="play: play against the computer [default] | solve: use it as a solver | bot_play: plays against itself",
+    )
+    parser.add_argument(
+        "--wordle_word",
+        help="Sets the target word. Useful for bot_play mode. If not set, a random world will be chosen instead.",
     )
     parser.add_argument(
         "--words_file",
@@ -281,6 +288,7 @@ def main():
     parser.add_argument(
         "--log_level",
         default="INFO",
+        help="Default: INFO. Also case-insensitive, so save yourself a caps lock press.",
         type=str.upper,
         choices=list(logging._nameToLevel.keys()),
     )
@@ -289,10 +297,8 @@ def main():
         default=[],
         nargs="*",
         type=str,
-        help="Space separated list of words. First guess will be chosen from this list.",
+        help="Space separated list of words. First guess will be chosen from this list. If not set, a random world will be chosen instead.",
     )
-    parser.add_argument("--wordle_word", help="Sets the target word.")
-    parser.add_argument("--debug_mode", default=False, action="store_true")
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
