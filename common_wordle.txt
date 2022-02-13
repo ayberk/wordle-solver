@@ -45,7 +45,6 @@ cross
 start
 might
 story
-don't
 while
 press
 close
@@ -172,7 +171,6 @@ spoke
 human
 party
 agree
-won't
 chair
 fruit
 thick
