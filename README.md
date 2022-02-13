@@ -21,5 +21,7 @@ The most important argument is `game_mode`:
 ----
 TODO:
 - [ ] Blog post
+- [ ] Cleanup: lots of unnecessary repetition and verbosity
+- [ ] It really sucks for words with duplicate letters. Should be easy to improve? (famous last words)
 - [ ] Run monte-carlo simulations to figure out best words/strategies
 - [ ] Improve elimination by assigning scores to each word based on character frequency.
