@@ -68,7 +68,7 @@ class WordleGame:
         if len(guessed_word) != WORD_LENGTH:
             return (
                 f"Since you can't count, let me help you: {len(guessed_word)} is not equal to "
-                "{WORD_LENGTH}."
+                f"{WORD_LENGTH}."
             )
 
         guessed_word = guessed_word.upper()  # ew
@@ -142,10 +142,9 @@ class WordleGame:
         while not (self._game_over or self._won):
             guess = input("Enter your guess: ")
             print(self.process_guess(guess.lower()))
-        # done with the game
         logging.info("-------------- end of game -------------")
         if self._won:
-            logging.info("good job, i guess")
+            logging.info("Good job, I guess.")
         else:
             logging.info(f"Here's the answer: {self._word.upper()}")
 
@@ -158,7 +157,7 @@ class WordleGame:
             solver.process_feedback(feedback)
         logging.info("-------------- end of game -------------")
         if self._won:
-            logging.info(f"It took you {self._guess_count} guesses. Good job, I guess")
+            logging.info(f"It took you {self._guess_count} guesses. Good job, I guess.")
         else:
             logging.info(f"Here's the answer: {self._word}")
 
@@ -169,21 +168,27 @@ class WordleSolver:
         self._eliminated_letters = set()
         self._word_letters = set()
         self._guesses = []
-        self._possible_locations = collections.defaultdict(lambda: set([0, 1, 2, 3, 4]))
+        self._possible_locations = collections.defaultdict(
+            lambda: set(i for i in range(WORD_LENGTH))
+        )
         self._possible_letters = collections.defaultdict(lambda: set(list(string.ascii_uppercase)))
-        self._possible_words = start_words  # THIS HELPS A LOT
+        self._possible_words = []
+        self._start_words = start_words
 
-        if not self._possible_words:
-            # this file only has 5-letter words
-            with open(input_file_name) as word_file:
-                for line in word_file:
-                    self._possible_words.append(line.strip().upper())
+        with open(input_file_name) as word_file:
+            for line in word_file:
+                self._possible_words.append(line.strip().upper())
 
     def make_guess(self):
         if not self._possible_words:
             return "No way. I have been defeated!"  # a word that's not in our dictionary...
 
-        self._guesses.append(random.choice(self._possible_words).upper())
+        if self._start_words:
+            self._guesses.append(random.choice(self._start_words).upper())
+            self._start_words = []  # ugh
+        else:
+            self._guesses.append(random.choice(self._possible_words).upper())
+
         return self._guesses[-1]
 
     def process_feedback(self, feedback):
@@ -194,21 +199,14 @@ class WordleSolver:
         for idx, val in enumerate(feedback):
             letter = last_guess[idx].upper()
             if val == 1:
-                self._possible_locations[letter] = set([idx])
+                if letter in self._word_letters:
+                    self._possible_locations[letter].add(idx)
+                else:
+                    self._possible_locations[letter] = set([idx])
                 self._possible_letters[idx] = set(letter)
                 self._word_letters.add(letter)
             elif val == 0:
-                try:
-                    # TODO: Fix occasional KeyError. It happens with duplicate letters. It doesn't
-                    # necessarily break anything. An example:
-                    # target: `parts``; first guess: `nasty`` --> now possible_locations[t] = {3},
-                    # but if the next guess is `watts`, we try to remove 2 from {3}.
-                    self._possible_locations[letter].remove(idx)
-                except:
-                    logging.debug(
-                        f"tried to remove {idx} from {self._possible_locations[letter]} for letter \
-                        {letter}. These were the guesses so far: {self._guesses}"
-                    )
+                self._possible_locations[letter].remove(idx)
                 self._possible_letters[idx].remove(letter)
                 self._word_letters.add(letter)
             elif len(self._possible_locations[letter]) == WORD_LENGTH:
@@ -220,7 +218,7 @@ class WordleSolver:
         for candidate in self._possible_words:
             include = True
             for idx, c in enumerate(candidate.upper()):
-                # this fixes the issue with eliminating clock, when chino is guessed (loc[c] = {0})
+                # this fixes eliminating `clock`, when `chino` is guessed (loc[c] = {0})
                 # if idx not in self.possible_locations[c]:
                 #     include = False
                 #     break

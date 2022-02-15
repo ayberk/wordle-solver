@@ -14,7 +14,7 @@ Oh also, if you do, please let me know so I can live the rest of my life with re
 `python3 wordle.py --help`
 
 The most important argument is `game_mode`:
-- `play`: In this mode you play against the computer. Good for practicing.
+- `play`: In this mode you play against the computer. Good for practicing. This is the default mode.
 - `solve`: In this mode the bot solves the puzzle for you. It gives you a guess word, you give it back the feedback, i.e., which letters are green etc.
 - `bot_play`: In this mode you basically become the observer. Useful for running simulations.
 
