@@ -1,3 +1,4 @@
+from email import feedparser
 import os
 import argparse
 import random
@@ -63,62 +64,21 @@ class WordleGame:
         -1 -> Gray
         """
         if self._won or self._game_over:
-            return "Sorry, game is over."
-
-        if len(guessed_word) != WORD_LENGTH:
-            return (
-                f"Since you can't count, let me help you: {len(guessed_word)} is not equal to "
-                f"{WORD_LENGTH}."
-            )
-
-        guessed_word = guessed_word.upper()  # ew
-
-        self._guess_count += 1
-        if guessed_word == self._word:
-            self._won = True
-            return f"Correct. This was your guess number {self._guess_count}."
-
-        result = []
-        # We use this temp buffer to mark green and yellow letters to deal with duplicates.
-        temp_word = list(self._word)
-        for i, c in enumerate(guessed_word):
-            if c == temp_word[i]:
-                result.append(1)
-                temp_word[i] = "#"
-            elif c in temp_word:
-                temp_word[temp_word.index(c)] = "!"
-                result.append(0)
-            else:
-                result.append(-1)
-
-        self._game_over = self._guess_count >= MAX_GUESSES
-
-        # can return a tuple here to make this more flexible
-        return f"Guess #{self._guess_count} -- {guessed_word}: {' '.join(map(str, result))}"
-
-    # TODO: DELETE DELETE DELETE
-    # Return types are different, hence two methods. Can easily be merged to return a named tuple.
-    def process_guess_for_bot(self, guessed_word):
-        """This one is reponsible for returning the "feedback" for the guess.
-
-        1  -> Green
-        0  -> Yellow
-        -1 -> Gray
-        """
-        if self._won or self._game_over:
-            return []
+            return (self._guess_count, guessed_word, [])
 
         if len(guessed_word) != WORD_LENGTH:
             logging.warning(f"{guessed_word}: {len(guessed_word)}")
-            return []
+            return (self._guess_count, guessed_word, [])
 
-        guessed_word = guessed_word.upper()  # ew 2
+        if not guessed_word:
+            logging.warning("Empty Guess! You wasted a guess :)")
 
+        guessed_word = guessed_word.upper()  # ew
         self._guess_count += 1
         if guessed_word == self._word:
             self._won = True
             logging.info(f"Correct! The word was {guessed_word}")
-            return []
+            return (self._guess_count, guessed_word, [])
 
         result = []
         # We use this temp buffer to mark green and yellow letters to deal with duplicates.
@@ -136,12 +96,13 @@ class WordleGame:
         self._game_over = self._guess_count >= MAX_GUESSES
 
         # can return a tuple here to make this more flexible
-        return result
+        return (self._guess_count, guessed_word, result)
 
     def play(self):
         while not (self._game_over or self._won):
             guess = input("Enter your guess: ")
-            print(self.process_guess(guess.lower()))
+            guess_count, guessed_word, feedback = self.process_guess(guess.lower())
+            print(f"Guess #{guess_count} -- {guessed_word}: {' '.join(map(str, feedback))}")
         logging.info("-------------- end of game -------------")
         if self._won:
             logging.info("Good job, I guess.")
@@ -152,8 +113,9 @@ class WordleGame:
         logging.info(f"Here's the word the bot is trying to guess: {self._word.upper()}")
         while not (self._game_over or self._won):
             guess = solver.make_guess()
-            logging.info(f"Guess: {guess}")
-            feedback = self.process_guess_for_bot(guess.lower())
+            feedback = self.process_guess(guess.lower())[-1]
+            if feedback:
+                logging.info(f"Guess: {guess}, feedback: {feedback}")
             solver.process_feedback(feedback)
         logging.info("-------------- end of game -------------")
         if self._won:
@@ -181,7 +143,8 @@ class WordleSolver:
 
     def make_guess(self):
         if not self._possible_words:
-            return "No way. I have been defeated!"  # a word that's not in our dictionary...
+            logging.info("No way. I have been defeated!")  # a word that's not in our dictionary...
+            return
 
         if self._start_words:
             self._guesses.append(random.choice(self._start_words).upper())
@@ -206,7 +169,8 @@ class WordleSolver:
                 self._possible_letters[idx] = set(letter)
                 self._word_letters.add(letter)
             elif val == 0:
-                self._possible_locations[letter].remove(idx)
+                if idx in self._possible_locations[letter]:
+                    self._possible_locations[letter].remove(idx)
                 self._possible_letters[idx].remove(letter)
                 self._word_letters.add(letter)
             elif len(self._possible_locations[letter]) == WORD_LENGTH:
