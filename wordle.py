@@ -66,7 +66,10 @@ class WordleGame:
             return "Sorry, game is over."
 
         if len(guessed_word) != WORD_LENGTH:
-            return f"Since you can't count, let me help you: {len(guessed_word)} is not equal to {WORD_LENGTH}."
+            return (
+                f"Since you can't count, let me help you: {len(guessed_word)} is not equal to "
+                "{WORD_LENGTH}."
+            )
 
         guessed_word = guessed_word.upper()  # ew
 
@@ -94,6 +97,7 @@ class WordleGame:
         return f"Guess #{self._guess_count} -- {guessed_word}: {' '.join(map(str, result))}"
 
     # TODO: DELETE DELETE DELETE
+    # Return types are different, hence two methods. Can easily be merged to return a named tuple.
     def process_guess_for_bot(self, guessed_word):
         """This one is reponsible for returning the "feedback" for the guess.
 
@@ -160,29 +164,26 @@ class WordleGame:
 
 
 class WordleSolver:
+    # TODO clean this up ffs
     def __init__(self, input_file_name, start_words=[]):
-        self._possible_words = []
-        self._eliminated_letters = set()  # is this really necessary?
+        self._eliminated_letters = set()
         self._word_letters = set()
         self._guesses = []
-        self._feedbacks = []
         self._possible_locations = collections.defaultdict(lambda: set([0, 1, 2, 3, 4]))
         self._possible_letters = collections.defaultdict(lambda: set(list(string.ascii_uppercase)))
-        self.start_words = start_words  # THIS HELPS A LOT
+        self._possible_words = start_words  # THIS HELPS A LOT
 
-        # this file only has 5-letter words
-        with open(input_file_name) as word_file:
-            for line in word_file:
-                self._possible_words.append(line.strip().upper())
+        if not self._possible_words:
+            # this file only has 5-letter words
+            with open(input_file_name) as word_file:
+                for line in word_file:
+                    self._possible_words.append(line.strip().upper())
 
     def make_guess(self):
         if not self._possible_words:
-            return "aaaaa"  # this should never happen, obviously
+            return "No way. I have been defeated!"  # a word that's not in our dictionary...
 
-        if not self._guesses and self.start_words:
-            self._guesses.append(random.choice(self.start_words).upper())
-        else:
-            self._guesses.append(random.choice(self._possible_words).upper())
+        self._guesses.append(random.choice(self._possible_words).upper())
         return self._guesses[-1]
 
     def process_feedback(self, feedback):
@@ -200,11 +201,13 @@ class WordleSolver:
                 try:
                     # TODO: Fix occasional KeyError. It happens with duplicate letters. It doesn't
                     # necessarily break anything. An example:
-                    # target: `parts``; first guess: `nasty`` --> now possible_locations[t] = {3}, but if the next guess is `watts`, we try to remove 2 from {3}.
+                    # target: `parts``; first guess: `nasty`` --> now possible_locations[t] = {3},
+                    # but if the next guess is `watts`, we try to remove 2 from {3}.
                     self._possible_locations[letter].remove(idx)
                 except:
                     logging.debug(
-                        f"tried to remove {idx} from {self._possible_locations[letter]} for letter {letter}. These were the guesses so far: {self._guesses}"
+                        f"tried to remove {idx} from {self._possible_locations[letter]} for letter \
+                        {letter}. These were the guesses so far: {self._guesses}"
                     )
                 self._possible_letters[idx].remove(letter)
                 self._word_letters.add(letter)
@@ -222,11 +225,11 @@ class WordleSolver:
                 #     include = False
                 #     break
 
-                # this eliminates the words that don't contain all "found" letters.
+                # eliminate the words that don't contain all "found" letters
                 if not all(w in candidate for w in self._word_letters):
                     include = False
                     break
-                # this eliminates the words that conflicts with the feedback
+                # eliminate the words that conflict with the feedback
                 if c in self._eliminated_letters or c not in self._possible_letters[idx]:
                     include = False
                     break
@@ -314,7 +317,17 @@ def main():
     )
     parser.add_argument(
         "--start_words",
-        default=[],
+        default=[
+            "stern",
+            "adieu",
+            "audio",
+            "stare",
+            "teary",
+            "poious",
+            "crane",
+            "trace",
+            "arise",
+        ],
         nargs="*",
         type=str,
         help="Space separated list of words. First guess will be chosen from this list. If not set, a random world will be chosen instead.",
@@ -335,18 +348,7 @@ def main():
         solver = WordleSolver(output_file_name)
         wg.play_with_bot(solver)
     elif args.game_mode == "solve":
-        good_words = [
-            "stern",
-            "adieu",
-            "audio",
-            "stare",
-            "teary",
-            "poious",
-            "crane",
-            "trace",
-            "arise",
-        ]
-        solver = WordleSolver(output_file_name, good_words)  # args.start_words)
+        solver = WordleSolver(output_file_name, args.start_words)
         helper = WordleHelper(solver)
         helper.play()
     else:
