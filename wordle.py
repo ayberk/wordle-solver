@@ -13,7 +13,6 @@ DEFAULT_START_WORDS = [
     "audio",
     "stare",
     "teary",
-    "poious",
     "crane",
     "trace",
     "arise",
@@ -60,6 +59,7 @@ class WordleGame:
             self._word = input_word.upper()
         self._max_guesses = MAX_GUESSES
         self._guess_count = 0
+        self._invalid_guess_count = 0
         self._game_over = False
         self._won = False
 
@@ -82,8 +82,9 @@ class WordleGame:
             return (self._guess_count, guessed_word, [])
 
         if not guessed_word or len(guessed_word) != WORD_LENGTH:
-            logging.warning(f"{guessed_word}: {len(guessed_word)}")
-            return (self._guess_count, guessed_word, [])
+            logging.warning(f"{guessed_word} doesn't seem to be a valid guess.")
+            self._invalid_guess_count += 1
+            return (self._invalid_guess_count, guessed_word, [])
 
         self._guess_count += 1
         guessed_word = guessed_word.upper()  # ew, but necessary
@@ -96,10 +97,12 @@ class WordleGame:
         # We use this temp buffer to deal with duplicates
         temp_word = self._word
         for i, c in enumerate(guessed_word):
-            # don't try this at home
             position = temp_word.find(c)
+            # don't try this at home
             result.append(position if position == -1 else int(position == i))
-            temp_word = temp_word[:position] + "!" + temp_word[position + 1 :]  # i hate py so much
+            if position > -1:
+                # I hate py so much
+                temp_word = temp_word[:position] + "!" + temp_word[position + 1 :]
 
         self._game_over = self._guess_count >= MAX_GUESSES
 
@@ -117,7 +120,7 @@ class WordleGame:
             guess = solver.make_guess()
             feedback = self.process_guess(guess)
             if feedback[-1]:
-                logging.info(f"Guess: {guess}, feedback: {feedback}")
+                logging.info(f"Guess: {guess}, feedback: {feedback[-1]}")
             solver.process_feedback(feedback)
 
     def start(self, game_mode, solver):
@@ -152,6 +155,7 @@ class WordleSolver:
         self._position_to_letters = collections.defaultdict(
             lambda: set(list(string.ascii_uppercase))
         )
+
         self._possible_words = []
         self._start_words = start_words
 
@@ -162,7 +166,7 @@ class WordleSolver:
     def make_guess(self):
         if not self._possible_words:
             logging.info("No way. I have been defeated!")  # a word that's not in our dictionary...
-            return
+            exit(0)
 
         if self._start_words:
             self._guesses.append(random.choice(self._start_words).upper())
@@ -181,11 +185,13 @@ class WordleSolver:
         for idx, val in enumerate(feedback):
             letter = last_guess[idx].upper()
             if val == 1:
+                self._position_to_letters[idx] = {letter}
+                for l in string.ascii_uppercase:
+                    self._letter_locations[l].discard(idx)
                 if letter in self._word_letters:
                     self._letter_locations[letter].add(idx)
                 else:
                     self._letter_locations[letter] = {idx}
-                self._position_to_letters[idx] = {letter}
                 self._word_letters.add(letter)
             elif val == 0:
                 if idx in self._letter_locations[letter]:
@@ -193,7 +199,8 @@ class WordleSolver:
                 self._position_to_letters[idx].remove(letter)
                 self._word_letters.add(letter)
             else:
-                self._letter_locations.clear()
+                if letter not in self._word_letters:
+                    self._letter_locations[letter].clear()
                 self._position_to_letters[idx].discard(letter)
 
         new_candidates = []
@@ -208,7 +215,7 @@ class WordleSolver:
             else:
                 new_candidates.append(candidate)
 
-        if guess_count == MAX_GUESSES:
+        if guess_count >= MAX_GUESSES:
             logging.info(
                 f"I lost? :( Final possible word list before the last guess: {self._possible_words}"
             )
