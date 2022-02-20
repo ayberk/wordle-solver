@@ -1,17 +1,27 @@
-from email import feedparser
-import os
 import argparse
-import random
 import collections
-import string
 import logging
+import os
+import random
+import string
 
 MAX_GUESSES = 5  # TODO: make this an arg
 WORD_LENGTH = 5  # TODO: make this an arg
+DEFAULT_START_WORDS = [
+    "stern",
+    "adieu",
+    "audio",
+    "stare",
+    "teary",
+    "poious",
+    "crane",
+    "trace",
+    "arise",
+]
 
 
 def generate_word_list(input_file_name, output_file_name):
-    """Util function to generate the initial word list. I had to run this once."""
+    """Util function to generate the eligible word list."""
 
     if not os.path.exists(input_file_name):
         logging.error(f"I can't find {input_file_name}, can you double check pretty please?")
@@ -24,7 +34,12 @@ def generate_word_list(input_file_name, output_file_name):
     valid_words = []
     with open(input_file_name) as word_file:
         words = list(word_file.read().split())
-        valid_words = list(filter(lambda w: len(w) == WORD_LENGTH, words))
+        valid_words = list(
+            filter(
+                lambda w: len(w) == WORD_LENGTH,
+                words,
+            )
+        )
 
     if not valid_words:
         logging.error("no valid words :(")
@@ -66,58 +81,60 @@ class WordleGame:
         if self._won or self._game_over:
             return (self._guess_count, guessed_word, [])
 
-        if len(guessed_word) != WORD_LENGTH:
+        if not guessed_word or len(guessed_word) != WORD_LENGTH:
             logging.warning(f"{guessed_word}: {len(guessed_word)}")
             return (self._guess_count, guessed_word, [])
 
-        if not guessed_word:
-            logging.warning("Empty Guess! You wasted a guess :)")
-
-        guessed_word = guessed_word.upper()  # ew
         self._guess_count += 1
+        guessed_word = guessed_word.upper()  # ew, but necessary
         if guessed_word == self._word:
             self._won = True
             logging.info(f"Correct! The word was {guessed_word}")
             return (self._guess_count, guessed_word, [])
 
         result = []
-        # We use this temp buffer to mark green and yellow letters to deal with duplicates.
-        temp_word = list(self._word)
+        # We use this temp buffer to deal with duplicates
+        temp_word = self._word
         for i, c in enumerate(guessed_word):
-            if c == temp_word[i]:
-                result.append(1)
-                temp_word[i] = "#"
-            elif c in temp_word:
-                temp_word[temp_word.index(c)] = "!"
-                result.append(0)
-            else:
-                result.append(-1)
+            # don't try this at home
+            position = temp_word.find(c)
+            result.append(position if position == -1 else int(position == i))
+            temp_word = temp_word[:position] + "!" + temp_word[position + 1 :]  # i hate py so much
 
         self._game_over = self._guess_count >= MAX_GUESSES
 
-        # can return a tuple here to make this more flexible
         return (self._guess_count, guessed_word, result)
 
-    def play(self):
+    def play_loop(self):
         while not (self._game_over or self._won):
             guess = input("Enter your guess: ")
-            guess_count, guessed_word, feedback = self.process_guess(guess.lower())
+            guess_count, guessed_word, feedback = self.process_guess(guess)
             print(f"Guess #{guess_count} -- {guessed_word}: {' '.join(map(str, feedback))}")
-        logging.info("-------------- end of game -------------")
-        if self._won:
-            logging.info("Good job, I guess.")
-        else:
-            logging.info(f"Here's the answer: {self._word.upper()}")
 
-    def play_with_bot(self, solver):
-        logging.info(f"Here's the word the bot is trying to guess: {self._word.upper()}")
+    def bot_play_loop(self, solver):
+        logging.info(f"Here's the word the bot is trying to guess: {self._word}")
         while not (self._game_over or self._won):
             guess = solver.make_guess()
-            feedback = self.process_guess(guess.lower())[-1]
-            if feedback:
+            feedback = self.process_guess(guess)
+            if feedback[-1]:
                 logging.info(f"Guess: {guess}, feedback: {feedback}")
             solver.process_feedback(feedback)
-        logging.info("-------------- end of game -------------")
+
+    def start(self, game_mode, solver):
+        if game_mode == "play":
+            self.play_loop()
+        elif game_mode == "bot_play":
+            self.bot_play_loop(solver)
+        elif game_mode == "solve":
+            # Don't pass a bad solver here. I'll know.
+            helper = WordleHelper(solver)
+            helper.play()
+
+        if self._guess_count <= 0:
+            logging.error("Unknown game mode :(")
+            return
+
+        logging.info("-------------- Game Over -------------")
         if self._won:
             logging.info(f"It took you {self._guess_count} guesses. Good job, I guess.")
         else:
@@ -127,13 +144,14 @@ class WordleGame:
 class WordleSolver:
     # TODO clean this up ffs
     def __init__(self, input_file_name, start_words=[]):
-        self._eliminated_letters = set()
         self._word_letters = set()
         self._guesses = []
-        self._possible_locations = collections.defaultdict(
-            lambda: set(i for i in range(WORD_LENGTH))
+        # each letter can be at any position initially
+        self._letter_locations = collections.defaultdict(lambda: set(i for i in range(WORD_LENGTH)))
+        # and each position can have any letter initially
+        self._position_to_letters = collections.defaultdict(
+            lambda: set(list(string.ascii_uppercase))
         )
-        self._possible_letters = collections.defaultdict(lambda: set(list(string.ascii_uppercase)))
         self._possible_words = []
         self._start_words = start_words
 
@@ -154,78 +172,66 @@ class WordleSolver:
 
         return self._guesses[-1]
 
-    def process_feedback(self, feedback):
-        if not feedback:
+    def process_feedback(self, raw_feedback):
+        if not raw_feedback[-1]:
             return
 
-        last_guess = self._guesses[-1]
+        guess_count, last_guess, feedback = raw_feedback
+        # I thought about making this loop nicer, but then I realized I don't really care enough.
         for idx, val in enumerate(feedback):
             letter = last_guess[idx].upper()
             if val == 1:
                 if letter in self._word_letters:
-                    self._possible_locations[letter].add(idx)
+                    self._letter_locations[letter].add(idx)
                 else:
-                    self._possible_locations[letter] = set([idx])
-                self._possible_letters[idx] = set(letter)
+                    self._letter_locations[letter] = {idx}
+                self._position_to_letters[idx] = {letter}
                 self._word_letters.add(letter)
             elif val == 0:
-                if idx in self._possible_locations[letter]:
-                    self._possible_locations[letter].remove(idx)
-                self._possible_letters[idx].remove(letter)
+                if idx in self._letter_locations[letter]:
+                    self._letter_locations[letter].remove(idx)
+                self._position_to_letters[idx].remove(letter)
                 self._word_letters.add(letter)
-            elif len(self._possible_locations[letter]) == WORD_LENGTH:
-                self._eliminated_letters.add(letter)
-                self._possible_locations[letter].clear()
-                self._possible_letters[idx].remove(letter)
+            else:
+                self._letter_locations.clear()
+                self._position_to_letters[idx].discard(letter)
 
         new_candidates = []
         for candidate in self._possible_words:
-            include = True
             for idx, c in enumerate(candidate.upper()):
-                # this fixes eliminating `clock`, when `chino` is guessed (loc[c] = {0})
-                # if idx not in self.possible_locations[c]:
-                #     include = False
-                #     break
-
                 # eliminate the words that don't contain all "found" letters
                 if not all(w in candidate for w in self._word_letters):
-                    include = False
                     break
                 # eliminate the words that conflict with the feedback
-                if c in self._eliminated_letters or c not in self._possible_letters[idx]:
-                    include = False
+                if not self._letter_locations[c] or c not in self._position_to_letters[idx]:
                     break
-
-            if include:
+            else:
                 new_candidates.append(candidate)
 
-        if len(self._guesses) == MAX_GUESSES:
+        if guess_count == MAX_GUESSES:
             logging.info(
-                f"Did I lose? :( Final possible word list before the last guess: {self._possible_words}"
+                f"I lost? :( Final possible word list before the last guess: {self._possible_words}"
             )
-        logging.debug(f"guess: {last_guess}, feedback: {feedback}, {self._possible_locations}")
-        logging.debug(f"eliminated: {self._eliminated_letters}, word_letters: {self._word_letters}")
+        logging.debug(f"guess: {last_guess}, feedback: {feedback}, {self._letter_locations}")
         self._possible_words = new_candidates
 
-        if len(new_candidates) < 10:
-            logging.debug(new_candidates)
 
-
+# Honestly, it should be possible to get rid of this, but why would I waste time on that?
 class WordleHelper:
     def __init__(self, solver, max_guesses=MAX_GUESSES):
         self._solver = solver
         self._max_guesses = max_guesses
-        self._number_of_guests = 0
+        self._number_of_guesses = 0
 
     def play(self):
         logging.info("Here's how this works: I give you a guess, and you give me the feedback.")
         logging.info(
-            "Enter space-separated 1 for green, 0 for yellow and -1 for gray letters: 1 1 -1 0 0"
+            "Enter space-separated 1 for green, 0 for yellow and -1 for gray letters, eg, 1 1 -1 0 0"
         )
-        logging.info("I'll handle the rest")
+        logging.info("I'll handle the rest.")
 
-        while self._number_of_guests <= self._max_guesses:
-            self._max_guesses += 1
+        while self._number_of_guesses < self._max_guesses:
+            self._number_of_guesses += 1
             guess = self._solver.make_guess()
             logging.info(f"Guess: {guess}")
             feedback = []
@@ -246,10 +252,7 @@ class WordleHelper:
 
 
 # TODO
-# (target: sprat, guess: awiap) -- what's the feedback? does it handle the a's correctly?
-# (target:clock, guess: chino) -- returns [1, -1, -1, -1, 0], which means we set possible location
-# for c as {0}, so we eliminate clock, which is wrong.
-# good starting words: ["stern", "adieu", "audio", "stare", "teary", "poious", "crane", "trace", "arise"]
+# (target: sprat, guess: awiap) -- [0, -1, -1, -1, 0] doesn't handle the A's correctly here
 def main():
     parser = argparse.ArgumentParser(
         description="Solves/plays wordle. It supports multiple modes so you can use it as a solver or just play the game as usual."
@@ -267,7 +270,7 @@ def main():
     )
     parser.add_argument(
         "--words_file",
-        default="google-10000-english-usa-no-swears-medium.txt",
+        default="dictionaries/google-10000-english-usa-no-swears-medium.txt",
         help="A file containing one word per line. It'll be used as the valid word list.",
     )
     parser.add_argument(
@@ -279,17 +282,7 @@ def main():
     )
     parser.add_argument(
         "--start_words",
-        default=[
-            "stern",
-            "adieu",
-            "audio",
-            "stare",
-            "teary",
-            "poious",
-            "crane",
-            "trace",
-            "arise",
-        ],
+        default=DEFAULT_START_WORDS,
         nargs="*",
         type=str,
         help="Space separated list of words. First guess will be chosen from this list. If not set, a random world will be chosen instead.",
@@ -297,7 +290,9 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(
-        format="%(asctime)s %(message)s", level=getattr(logging, args.log_level.upper())
+        format="%(asctime)s %(levelname)s %(message)s",
+        level=getattr(logging, args.log_level.upper()),
+        datefmt="%I:%M:%S",
     )
 
     output_file_name = f"{args.words_file.split('.')[0]}_wordle.txt"
@@ -306,15 +301,7 @@ def main():
         generate_word_list(args.words_file, output_file_name)
 
     wg = WordleGame(input_word=args.wordle_word, input_file_name=output_file_name)
-    if args.game_mode == "bot_play":
-        solver = WordleSolver(output_file_name)
-        wg.play_with_bot(solver)
-    elif args.game_mode == "solve":
-        solver = WordleSolver(output_file_name, args.start_words)
-        helper = WordleHelper(solver)
-        helper.play()
-    else:
-        wg.play()
+    wg.start(args.game_mode, WordleSolver(output_file_name, args.start_words))
 
 
 if __name__ == "__main__":
