@@ -28,6 +28,7 @@ It should be fairly straightforward to use your own solver. The interface only h
 
 ----
 TODO:
+- [ ] Use the most-common words first and if fails fallback to words.txt
 - [ ] Run monte-carlo simulations to figure out best words/strategies
 - [ ] Improve elimination by assigning scores to each word based on character frequency.
 - [ ] WaaS: Wordle as a Service. Expose an API, because why not?

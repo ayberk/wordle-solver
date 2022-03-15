@@ -282,7 +282,7 @@ def main():
     )
     parser.add_argument(
         "--words_file",
-        default="dictionaries/google-10000-english-usa-no-swears-medium.txt",
+        default="dictionaries/words.txt",
         help="A file containing one word per line. It'll be used as the valid word list.",
     )
     parser.add_argument(
@@ -309,7 +309,7 @@ def main():
 
     output_file_name = f"{args.words_file.split('.')[0]}_wordle.txt"
 
-    if not os.path.exists(output_file_name):
+    if not os.path.exists(output_file_name) and args.words_file.endswith("_wordle.txt"):
         generate_word_list(args.words_file, output_file_name)
 
     wg = WordleGame(input_word=args.wordle_word, input_file_name=output_file_name)
