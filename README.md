@@ -22,6 +22,10 @@ The most important argument is `game_mode`:
 back the feedback, i.e., which letters are green etc.
 - `bot_play`: In this mode you basically become the observer. Useful for running simulations.
 
+### How to inject your own solver
+
+It should be fairly straightforward to use your own solver. The interface only has two methods and you can use the `WordleHelper` class as an example.
+
 ----
 TODO:
 - [ ] Run monte-carlo simulations to figure out best words/strategies

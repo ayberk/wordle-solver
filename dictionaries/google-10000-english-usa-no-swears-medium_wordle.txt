@@ -1357,3 +1357,4 @@ theta
 stake
 arbor
 cynic
+smelt
