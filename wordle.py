@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import string
+from unittest.util import _MAX_LENGTH
 
 MAX_GUESSES = 5  # TODO: make this an arg
 WORD_LENGTH = 5  # TODO: make this an arg
@@ -72,7 +73,7 @@ class WordleGame:
             return word.upper()
 
     def process_guess(self, guessed_word):
-        """This one is reponsible for returning the "feedback" for the guess.
+        """This one is responsible for returning the "feedback" for the guess.
 
         1  -> Green
         0  -> Yellow
@@ -176,11 +177,15 @@ class WordleSolver:
 
         return self._guesses[-1]
 
-    def process_feedback(self, raw_feedback):
-        if not raw_feedback[-1]:
+    def process_feedback(self, feedback):
+        if not feedback:
             return
 
-        guess_count, last_guess, feedback = raw_feedback
+        if sum(feedback) == WORD_LENGTH:
+            logging.info(f"Great, looks like {self._guesses[-1]} was the correct word!")
+            exit(0)
+
+        last_guess = self._guesses[-1]
         # I thought about making this loop nicer, but then I realized I don't really care enough.
         for idx, val in enumerate(feedback):
             letter = last_guess[idx].upper()
@@ -215,7 +220,7 @@ class WordleSolver:
             else:
                 new_candidates.append(candidate)
 
-        if guess_count >= MAX_GUESSES:
+        if len(self._guesses) >= MAX_GUESSES:
             logging.info(
                 f"I lost? :( Final possible word list before the last guess: {self._possible_words}"
             )
